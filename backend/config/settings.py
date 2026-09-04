@@ -43,6 +43,12 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'accounts',
+    'stores',
+    'products',
+    'orders',
+    'synchronization',
+    'webhooks',
+    'audit_logs',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
