@@ -1,5 +1,6 @@
 from django.db import models
 from stores.models import Store
+from django.conf import settings
 
 # Create your models here.
 class Product(models.Model):
@@ -8,6 +9,11 @@ class Product(models.Model):
         DRAFT = "draft", "Draft"
         ARCHIVED = "archived", "Archived"
 
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="products",
+    )
     title = models.CharField(max_length=225)
     description = models.TextField(blank=True)
 
@@ -32,11 +38,6 @@ class Variant(models.Model):
 
     sku = models.CharField(max_length=100, unique=True)
     title = models.CharField(max_length=255)
-
-    price = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-    )
 
     price = models.DecimalField(
         max_digits=12,
