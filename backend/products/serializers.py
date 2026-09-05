@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Product, Variant
+from .models import Product, Variant, Inventory
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -37,4 +37,20 @@ class VariantSerializer(serializers.ModelSerializer):
             "id",
             "created_at",
             "updated_at"
+        ]
+
+class InventorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Inventory
+        fields = [
+            "id",
+            "variant",
+            "store",
+            "quantity",
+            "reserved_quantity",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "updated_at",
         ]

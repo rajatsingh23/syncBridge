@@ -1,8 +1,9 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 
-from .models import Product, Variant
-from.serializers import ProductSerializer, VariantSerializer
+from .models import Product, Variant, Inventory
+from.serializers import ProductSerializer, VariantSerializer, InventorySerializer
 
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
@@ -24,7 +25,31 @@ class VariantViewSet(viewsets.ModelViewSet):
         product = serializer.validated_data["product"]
 
         if product.owner != self.request.user:
-            from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("You do not have permission to add variants to this product.")
         serializer.save()
-    
+
+class InventoryViewSet(viewsets.ModelViewSet):
+    serializer_class = InventorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Inventory.objects.filter(
+            variant__product__owner=self.request.user,
+            store__user=self.request.user,
+        )
+
+    def perform_create(self, serializer):
+        variant = serializer.validated_data["variant"]
+        store = serializer.validated_data["store"]
+
+        if variant.product.owner != self.request.user:
+            raise PermissionDenied(
+                "You do not have permission to manage this variant"
+            )
+
+        if store.user != self.request.user:
+            raise PermissionDenied(
+                "You do not have permission to manage this store."
+            )
+
+        serializer.save()
