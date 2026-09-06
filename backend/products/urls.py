@@ -7,5 +7,5 @@ router.register("products", ProductViewSet, basename="product")
 router.register("variants", VariantViewSet, basename="variant")
 router.register("inventory", InventoryViewSet, basename="inventory")
 router.register("external-products", ExternalProductViewSet, basename="external-products")
-router.register("external-variants", ExternalProductViewSet, basename="external-variant")
+router.register("external-variants", ExternalVariantViewSet, basename="external-variant")
 urlpatterns = router.urls
