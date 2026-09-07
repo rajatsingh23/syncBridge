@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from .pagination import MockStorePagination
 import time
+from copy import deepcopy
 
 from django.shortcuts import get_object_or_404
 
@@ -17,33 +18,46 @@ class MockProductListView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         simulate = request.query_params.get("simulate")
-        if simulate == "slow":
-            time.sleep(12)
-            
+
         if simulate == "401":
             return Response(
-                {"detail": "Authentication failed ."},
-                status = status.HTTP_401_UNAUTHORIZED
+                {"detail": "Authentication failed."},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
+
         if simulate == "404":
             return Response(
                 {"detail": "Resource not found."},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
             )
+
         if simulate == "429":
             return Response(
                 {"detail": "Rate limit exceeded."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
+
         if simulate == "500":
             return Response(
                 {"detail": "Internal server error."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
-        
-        return super().list(request, *args, *kwargs)
 
+        if simulate == "slow":
+            time.sleep(12)
+
+        if simulate == "duplicate":
+            products = list(self.get_queryset())
+
+            if products:
+                products.append(deepcopy(products[0]))
+
+            serializer = self.get_serializer(products, many=True)
+
+            return Response(serializer.data)
+
+        return super().list(request, *args, **kwargs)
+    
 class MockInventoryListView(generics.ListAPIView):
     queryset = MockInventory.objects.select_related("variant")
     serializer_class = MockInventorySerializer
