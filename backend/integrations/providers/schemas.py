@@ -15,3 +15,10 @@ class NormalizedProduct:
     title: str
     description: str
     variants: list[NormalizedVariant]
+
+@dataclass
+class NormalizedInventory:
+    external_variant_id: str
+    sku: str
+    quantity: int
+    reserved_quantity: int
