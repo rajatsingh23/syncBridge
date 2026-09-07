@@ -33,7 +33,10 @@ class MockProvider(BaseProvider):
         return response.json()
 
     def update_inventory(self, external_variant_id, quantity):
-        return {
-            "external_variant_id": external_variant_id,
-            "quantity": quantity,
-        }
+        response = requests.patch(
+            f"{self.base_url}/inventory/{external_variant_id}/",
+            json={"quantity": quantity},
+            timeout=10,
+        )
+        response.raise_for_status()
+        return response.json()
