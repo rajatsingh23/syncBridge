@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'synchronization',
     'webhooks',
     'audit_logs',
+    'mock_store',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
