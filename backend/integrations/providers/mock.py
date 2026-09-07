@@ -2,6 +2,13 @@ import requests
 from decimal import Decimal
 from .base import BaseProvider
 from .schemas import NormalizedProduct, NormalizedVariant, NormalizedInventory, NormalizedOrder
+from .errors import (
+    AuthenticationError,
+    NotFoundError,
+    ProviderRequestError,
+    RateLimitError,
+    TemporaryProviderError,
+)
 
 
 class MockProvider(BaseProvider):
@@ -14,7 +21,8 @@ class MockProvider(BaseProvider):
             f"{self.base_url}/products/",
             timeout=10,
         )
-        response.raise_for_status()
+        if not response.ok:
+            self._handle_response_error(response)
         products = response.json()
 
         return [
@@ -40,7 +48,8 @@ class MockProvider(BaseProvider):
             f"{self.base_url}/inventory/",
             timeout=10,
         )
-        response.raise_for_status()
+        if not response.ok:
+            self._handle_response_error(response)
 
         inventory_items = response.json()
 
@@ -59,7 +68,8 @@ class MockProvider(BaseProvider):
             f"{self.base_url}/orders/",
             timeout=10,
         )
-        response.raise_for_status()
+        if not response.ok:
+            self._handle_response_error(response)
 
         orders = response.json()
 
@@ -80,5 +90,26 @@ class MockProvider(BaseProvider):
             json={"quantity": quantity},
             timeout=10,
         )
-        response.raise_for_status()
+        if not response.ok:
+            self._handle_response_error(response)
         return response.json()
+
+    def _handle_response_error(self, response):
+        if response.status_code == 401:
+            raise AuthenticationError("Provider authentication failed.")
+
+        if response.status_code == 404:
+            raise NotFoundError("Provider resource was not found.")
+
+        if response.status_code == 429:
+            raise RateLimitError("Provider rate limit exceeded")
+
+        if response.status_code >= 500:
+            raise TemporaryProviderError(
+                f"Provider server error: {response.status_code}"
+            )
+
+        if response.status_code >= 400:
+            raise ProviderRequestError(
+                f"Provider request failed: {response.status_code}"
+            )
