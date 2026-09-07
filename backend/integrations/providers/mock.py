@@ -1,6 +1,7 @@
 import requests
 
 from .base import BaseProvider
+from .schemas import NormalizedProduct, NormalizedVariant
 
 
 class MockProvider(BaseProvider):
@@ -14,7 +15,25 @@ class MockProvider(BaseProvider):
             timeout=10,
         )
         response.raise_for_status()
-        return response.json()
+        products = response.json()
+
+        return [
+            NormalizedProduct(
+                external_id=product["external_id"],
+                title=product["title"],
+                description=product["description"],
+                variants=[
+                    NormalizedVariant(
+                        external_id=variant["external_id"],
+                        sku=variant["sku"],
+                        price=variant["price"],
+                        currency=variant["currency"],
+                    )
+                    for variant in product["variants"]
+                ],
+            )
+            for product in products
+        ]
 
     def get_inventory(self):
         response = requests.get(
