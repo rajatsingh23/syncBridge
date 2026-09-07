@@ -14,6 +14,20 @@ class MockProductListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     pagination_class = MockStorePagination
 
+    def list(self, request, *args, **kwargs):
+        simulate = request.query_params.get("simulate")
+        if simulate == "401":
+            return Response(
+                {"detail": "Authentication failed ."},
+                status = status.HTTP_401_UNAUTHORIZED
+            )
+        if simulate == "404":
+            return Response(
+                {"detail": "Resource not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        return super().list(request, *args, *kwargs)
+
 class MockInventoryListView(generics.ListAPIView):
     queryset = MockInventory.objects.select_related("variant")
     serializer_class = MockInventorySerializer
