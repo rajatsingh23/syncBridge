@@ -31,6 +31,11 @@ class MockProductListView(generics.ListAPIView):
                 {"detail": "Rate limit exceeded."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
+        if simulate == "500":
+            return Response(
+                {"detail": "Internal server error."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         return super().list(request, *args, *kwargs)
 
 class MockInventoryListView(generics.ListAPIView):
