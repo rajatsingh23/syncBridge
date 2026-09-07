@@ -26,6 +26,11 @@ class MockProductListView(generics.ListAPIView):
                 {"detail": "Resource not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
+        if simulate == "429":
+            return Response(
+                {"detail": "Rate limit exceeded."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
         return super().list(request, *args, *kwargs)
 
 class MockInventoryListView(generics.ListAPIView):
