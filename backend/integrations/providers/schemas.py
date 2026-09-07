@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-
+from decimal import Decimal
 
 @dataclass
 class NormalizedVariant:
@@ -22,3 +22,11 @@ class NormalizedInventory:
     sku: str
     quantity: int
     reserved_quantity: int
+
+@dataclass
+class NormalizedOrder:
+    external_id: str
+    customer_name: str
+    status: str
+    total_amount: Decimal
+    currency: str

@@ -1,7 +1,7 @@
 import requests
-
+from decimal import Decimal
 from .base import BaseProvider
-from .schemas import NormalizedProduct, NormalizedVariant, NormalizedInventory
+from .schemas import NormalizedProduct, NormalizedVariant, NormalizedInventory, NormalizedOrder
 
 
 class MockProvider(BaseProvider):
@@ -57,10 +57,22 @@ class MockProvider(BaseProvider):
     def get_orders(self):
         response = requests.get(
             f"{self.base_url}/orders/",
-            timeout=10
+            timeout=10,
         )
         response.raise_for_status()
-        return response.json()
+
+        orders = response.json()
+
+        return [
+            NormalizedOrder(
+                external_id=order["external_id"],
+                customer_name=order["customer_name"],
+                status=order["status"],
+                total_amount=Decimal(order["total_amount"]),
+                currency=order["currency"],
+            )
+            for order in orders
+        ]
 
     def update_inventory(self, external_variant_id, quantity):
         response = requests.patch(
