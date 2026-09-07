@@ -25,7 +25,12 @@ class MockProvider(BaseProvider):
         return response.json()
 
     def get_orders(self):
-        return []
+        response = requests.get(
+            f"{self.base_url}/orders/",
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
 
     def update_inventory(self, external_variant_id, quantity):
         return {

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import MockProduct, MockVariant, MockInventory
+from .models import MockProduct, MockVariant, MockInventory, MockOrder
 
 class MockVariantSerializer(serializers.ModelSerializer):
     class Meta:
@@ -54,3 +54,18 @@ class MockInventorySerializer(serializers.ModelSerializer):
             "sku",
             "updated_at",
         ]
+
+class MockOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MockOrder
+        fields = [
+            "id",
+            "external_id",
+            "customer_name",
+            "status",
+            "total_amount",
+            "currency",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]

@@ -1,7 +1,7 @@
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
-from .models import MockProduct, MockInventory
-from .serializers import MockProductSerializer, MockInventorySerializer
+from .models import MockProduct, MockInventory, MockOrder
+from .serializers import MockProductSerializer, MockInventorySerializer, MockOrderSerializer
 
 class MockProductListView(generics.ListAPIView):
     queryset = MockProduct.objects.all()
@@ -11,4 +11,9 @@ class MockProductListView(generics.ListAPIView):
 class MockInventoryListView(generics.ListAPIView):
     queryset = MockInventory.objects.select_related("variant")
     serializer_class = MockInventorySerializer
+    permission_classes = [AllowAny]
+
+class MockOrderListView(generics.ListAPIView):
+    queryset = MockOrder.objects.all()
+    serializer_class = MockOrderSerializer
     permission_classes = [AllowAny]
