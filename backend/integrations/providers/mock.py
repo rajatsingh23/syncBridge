@@ -17,7 +17,12 @@ class MockProvider(BaseProvider):
         return response.json()
 
     def get_inventory(self):
-        return []
+        response = requests.get(
+            f"{self.base_url}/inventory/",
+            timeout=10,
+        )
+        response.raise_for_status()
+        return response.json()
 
     def get_orders(self):
         return []
