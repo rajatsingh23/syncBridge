@@ -17,8 +17,21 @@ class MockProductListView(generics.ListAPIView):
     pagination_class = MockStorePagination
 
     def list(self, request, *args, **kwargs):
+        failure = request.query_params.get("failure")
+        if failure in {"400", "401", "404", "429", "500"}:
+            failure_statuses = {
+                "400": ("Bad request.", status.HTTP_400_BAD_REQUEST),
+                "401": ("Authentication failed.", status.HTTP_401_UNAUTHORIZED),
+                "404": ("Resource not found.", status.HTTP_404_NOT_FOUND),
+                "429": ("Rate limit exceeded.", status.HTTP_429_TOO_MANY_REQUESTS),
+                "500": ("Internal server error.", status.HTTP_500_INTERNAL_SERVER_ERROR),
+            }
+            message, response_status = failure_statuses[failure]
+            return Response(
+                {"detail": message},
+                status=response_status
+            )
         simulate = request.query_params.get("simulate")
-
         if simulate == "401":
             return Response(
                 {"detail": "Authentication failed."},
