@@ -1,6 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+from .pagination import MockStorePagination
 
 from django.shortcuts import get_object_or_404
 
@@ -11,6 +12,7 @@ class MockProductListView(generics.ListAPIView):
     queryset = MockProduct.objects.all()
     serializer_class = MockProductSerializer
     permission_classes = [AllowAny]
+    pagination_class = MockStorePagination
 
 class MockInventoryListView(generics.ListAPIView):
     queryset = MockInventory.objects.select_related("variant")
