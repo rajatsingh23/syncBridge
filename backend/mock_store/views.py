@@ -2,6 +2,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from .pagination import MockStorePagination
+import time
 
 from django.shortcuts import get_object_or_404
 
@@ -16,6 +17,9 @@ class MockProductListView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         simulate = request.query_params.get("simulate")
+        if simulate == "slow":
+            time.sleep(12)
+            
         if simulate == "401":
             return Response(
                 {"detail": "Authentication failed ."},
@@ -36,6 +40,8 @@ class MockProductListView(generics.ListAPIView):
                 {"detail": "Internal server error."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+        
         return super().list(request, *args, *kwargs)
 
 class MockInventoryListView(generics.ListAPIView):
