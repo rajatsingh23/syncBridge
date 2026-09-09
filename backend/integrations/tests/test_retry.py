@@ -113,3 +113,25 @@ class RetryCallTests(SimpleTestCase):
 
         self.assertEqual(result, "success")
         mock_sleep.assert_called_once_with(1)
+
+    def test_retry_stops_after_max_retries(self):
+        error = TemporaryProviderError()
+
+        operation = Mock(side_effect=error)
+
+        with patch("integrations.retry.time.sleep"):
+            with self.assertRaises(TemporaryProviderError):
+                retry_call(operation, max_retries=3)
+
+        self.assertEqual(operation.call_count, 4)
+
+    def test_zero_max_retries_makes_only_one_attempt(self):
+        error = TemporaryProviderError()
+        operation = Mock(side_effect=error)
+
+        with patch("integrations.retry.time.sleep") as mock_sleep:
+            with self.assertRaises(TemporaryProviderError):
+                retry_call(operation, max_retries=0)
+
+        self.assertEqual(operation.call_count, 1)
+        mock_sleep.assert_not_called()
