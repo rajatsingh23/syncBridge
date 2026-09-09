@@ -1,5 +1,5 @@
 from unittest.mock import patch
-
+import requests
 from django.test import SimpleTestCase
 
 from integrations.http_client import HTTPClient
@@ -41,3 +41,10 @@ class HTTPClientTests(SimpleTestCase):
             timeout=(2,7),
             json={"quantity": 100},
         )
+
+    @patch("integrations.http_client.requests.get")
+    def test_get_raises_read_timeout(self, mock_get):
+        mock_get.side_effect = requests.exceptions.ReadTimeout
+
+        with self.assertRaises(requests.exceptions.ReadTimeout):
+            HTTPClient().get("https://example.com")
