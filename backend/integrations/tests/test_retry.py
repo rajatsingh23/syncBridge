@@ -1,6 +1,13 @@
+from unittest.mock import Mock, patch
+
 from django.test import SimpleTestCase
 
-from integrations.retry import calculate_backoff_delay
+from unittest.mock import Mock, patch, call
+from integrations.retry import calculate_backoff_delay, retry_call
+from integrations.providers.errors import (
+    AuthenticationError,
+    TemporaryProviderError,
+)
 
 
 class BackoffTests(SimpleTestCase):
@@ -22,3 +29,64 @@ class BackoffTests(SimpleTestCase):
 
     def test_fourth_retry_doubles_again(self):
         self.assertEqual(calculate_backoff_delay(3), 8)
+
+
+class RetryCallTests(SimpleTestCase):
+
+    def test_successful_call_does_not_retry(self):
+        operation = Mock(return_value="success")
+
+        result = retry_call(operation)
+
+        self.assertEqual(result, "success")
+        operation.assert_called_once_with()
+
+    def test_retryable_error_is_retried(self):
+        operation = Mock(
+            side_effect=[
+                TemporaryProviderError(),
+                "success",
+            ]
+        )
+
+        with patch("integrations.retry.time.sleep") as mock_sleep:
+            result = retry_call(operation, max_retries=1)
+
+        self.assertEqual(result, "success")
+        self.assertEqual(operation.call_count, 2)
+        mock_sleep.assert_called_once_with(1)
+
+    def test_non_retryable_error_is_not_retried(self):
+        operation = Mock(
+            side_effect=AuthenticationError()
+        )
+
+        with patch("integrations.retry.time.sleep") as mock_sleep:
+            with self.assertRaises(AuthenticationError):
+                retry_call(operation, max_retries=3)
+
+        operation.assert_called_once_with()
+        mock_sleep.assert_not_called()
+
+    def test_multiple_retries_use_exponential_backoff(self):
+        operation = Mock(
+            side_effect=[
+                TemporaryProviderError(),
+                TemporaryProviderError(),
+                TemporaryProviderError(),
+                "success",
+            ]
+        )
+
+        with patch("integrations.retry.time.sleep") as mock_sleep:
+            result = retry_call(operation, max_retries=3)
+
+        self.assertEqual(result, "success")
+        self.assertEqual(operation.call_count, 4)
+        mock_sleep.assert_has_calls(
+            [
+                call(1),
+                call(2),
+                call(4),
+            ]
+        )
