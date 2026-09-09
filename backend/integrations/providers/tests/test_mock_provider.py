@@ -7,6 +7,8 @@ from integrations.providers.errors import (
     AuthenticationError,
     RateLimitError,
     TemporaryProviderError,
+    NotFoundError,
+    ProviderRequestError
 )
 from integrations.providers.mock import MockProvider
 from integrations.providers.schemas import (
@@ -130,3 +132,20 @@ class MockProviderTests(SimpleTestCase):
         self.provider.client.get.assert_called_once_with(
             f"{self.provider.base_url}/products/",
         )
+
+    def test_404_raises_not_found_error(self):
+        self.provider.client.get.return_value.ok = False
+        self.provider.client.get.return_value.status_code = 404
+        with self.assertRaises(NotFoundError) as context:
+            self.provider.get_products()
+
+        self.assertFalse(context.exception.retryable)
+
+    def test_400_raises_provider_request_error(self):
+        self.provider.client.get.return_value.ok = False
+        self.provider.client.get.return_value.status_code = 400
+
+        with self.assertRaises(ProviderRequestError) as context:
+            self.provider.get_products()
+
+        self.assertFalse(context.exception.retryable)
