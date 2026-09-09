@@ -26,6 +26,7 @@ class MockProviderTests(SimpleTestCase):
 
     def test_get_products_returns_normalized_products(self):
         self.provider.client.get.return_value.ok = True
+        self.provider.client.get.return_value.status_code = 200
         self.provider.client.get.return_value.json.return_value = [
             {
                 "external_id": "prod-001",
@@ -181,3 +182,44 @@ class MockProviderTests(SimpleTestCase):
             self.provider._handle_response_error(response)
 
         self.assertIsNone(context.exception.retry_after)
+
+    def test_get_products_handles_pagination(self):
+        first_response = Mock()
+        first_response.status_code = 200
+        first_response.json.return_value = {
+            "results": [
+                {
+                    "external_id": "mock-prod-001",
+                    "title": "Product 1",
+                    "description": "Description 1",
+                    "variants": [],
+                }
+            ],
+            "next": "http://example.com/products?page=2",
+        }
+
+        second_response = Mock()
+        second_response.status_code = 200
+        second_response.json.return_value = {
+            "results": [
+                {
+                    "external_id": "mock-prod-002",
+                    "title": "Product 2",
+                    "description": "Description 2",
+                    "variants": [],
+                }
+            ],
+            "next": None,
+        }
+
+        self.provider.client.get.side_effect = [
+            first_response,
+            second_response,
+        ]
+
+        products = self.provider.get_products()
+
+        self.assertEqual(len(products), 2)
+        self.assertEqual(products[0].external_id, "mock-prod-001")
+        self.assertEqual(products[1].external_id, "mock-prod-002")
+        self.assertEqual(self.provider.client.get.call_count, 2)

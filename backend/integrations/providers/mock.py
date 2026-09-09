@@ -18,30 +18,41 @@ class MockProvider(BaseProvider):
         self.client = HTTPClient()
 
     def get_products(self):
-        response = self.client.get(
-            f"{self.base_url}/products/",
-        )
-        if not response.ok:
+        products = []
+        url = f"{self.base_url}/products/"
+        while url:
+            response = self.client.get(url)
             self._handle_response_error(response)
-        products = response.json()
 
-        return [
-            NormalizedProduct(
-                external_id=product["external_id"],
-                title=product["title"],
-                description=product["description"],
-                variants=[
-                    NormalizedVariant(
-                        external_id=variant["external_id"],
-                        sku=variant["sku"],
-                        price=variant["price"],
-                        currency=variant["currency"],
-                    )
-                    for variant in product["variants"]
-                ],
+            data = response.json()
+
+            # Paginated response
+            if isinstance(data, dict):
+                page_products = data.get("results", [])
+                url = data.get("next")
+            else:
+                # Backward compatibility with non-paginated response
+                page_products = data
+                url = None
+
+            products.extend(
+                NormalizedProduct(
+                    external_id=product["external_id"],
+                    title=product["title"],
+                    description=product.get("description", ""),
+                    variants=[
+                        NormalizedVariant(
+                            external_id=variant["external_id"],
+                            sku=variant["sku"],
+                            price=Decimal(str(variant["price"])),
+                            currency=variant.get("variants", [])
+                        )
+                        for variant in product.get("variants", [])
+                    ],
+                )
+                for product in page_products
             )
-            for product in products
-        ]
+        return products
 
     def get_inventory(self):
         response = self.client.get(
