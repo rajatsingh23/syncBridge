@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from django.test import SimpleTestCase
 
@@ -20,12 +20,11 @@ class MockProviderTests(SimpleTestCase):
 
     def setUp(self):
         self.provider = MockProvider(store=None)
+        self.provider.client = Mock()
 
-    @patch("integrations.providers.mock.requests.get")
-    def test_get_products_returns_normalized_products(self, mock_get):
-        mock_response = Mock()
-        mock_response.ok = True
-        mock_response.json.return_value = [
+    def test_get_products_returns_normalized_products(self):
+        self.provider.client.get.return_value.ok = True
+        self.provider.client.get.return_value.json.return_value = [
             {
                 "external_id": "prod-001",
                 "title": "Test Product",
@@ -41,8 +40,6 @@ class MockProviderTests(SimpleTestCase):
             }
         ]
 
-        mock_get.return_value = mock_response
-
         products = self.provider.get_products()
 
         self.assertEqual(len(products), 1)
@@ -51,11 +48,13 @@ class MockProviderTests(SimpleTestCase):
         self.assertEqual(products[0].title, "Test Product")
         self.assertEqual(products[0].variants[0].sku, "TEST-SKU")
 
-    @patch("integrations.providers.mock.requests.get")
-    def test_get_inventory_returns_normalized_inventory(self, mock_get):
-        mock_response = Mock()
-        mock_response.ok = True
-        mock_response.json.return_value = [
+        self.provider.client.get.assert_called_once_with(
+            f"{self.provider.base_url}/products/",
+        )
+
+    def test_get_inventory_returns_normalized_inventory(self):
+        self.provider.client.get.return_value.ok = True
+        self.provider.client.get.return_value.json.return_value = [
             {
                 "external_variant_id": "var-001",
                 "sku": "TEST-SKU",
@@ -64,8 +63,6 @@ class MockProviderTests(SimpleTestCase):
             }
         ]
 
-        mock_get.return_value = mock_response
-
         inventory = self.provider.get_inventory()
 
         self.assertEqual(len(inventory), 1)
@@ -73,11 +70,13 @@ class MockProviderTests(SimpleTestCase):
         self.assertEqual(inventory[0].external_variant_id, "var-001")
         self.assertEqual(inventory[0].quantity, 100)
 
-    @patch("integrations.providers.mock.requests.get")
-    def test_get_orders_returns_normalized_orders(self, mock_get):
-        mock_response = Mock()
-        mock_response.ok = True
-        mock_response.json.return_value = [
+        self.provider.client.get.assert_called_once_with(
+            f"{self.provider.base_url}/inventory/",
+        )
+
+    def test_get_orders_returns_normalized_orders(self):
+        self.provider.client.get.return_value.ok = True
+        self.provider.client.get.return_value.json.return_value = [
             {
                 "external_id": "order-001",
                 "customer_name": "Test Customer",
@@ -87,8 +86,6 @@ class MockProviderTests(SimpleTestCase):
             }
         ]
 
-        mock_get.return_value = mock_response
-
         orders = self.provider.get_orders()
 
         self.assertEqual(len(orders), 1)
@@ -97,35 +94,39 @@ class MockProviderTests(SimpleTestCase):
         self.assertEqual(orders[0].customer_name, "Test Customer")
         self.assertEqual(orders[0].total_amount, Decimal("1998.00"))
 
-    @patch("integrations.providers.mock.requests.get")
-    def test_429_raises_rate_limit_error(self, mock_get):
-        mock_response = Mock()
-        mock_response.ok = False
-        mock_response.status_code = 429
+        self.provider.client.get.assert_called_once_with(
+            f"{self.provider.base_url}/orders/",
+        )
 
-        mock_get.return_value = mock_response
+    def test_429_raises_rate_limit_error(self):
+        self.provider.client.get.return_value.ok = False
+        self.provider.client.get.return_value.status_code = 429
 
         with self.assertRaises(RateLimitError):
             self.provider.get_products()
 
-    @patch("integrations.providers.mock.requests.get")
-    def test_401_raises_authentication_error(self, mock_get):
-        mock_response = Mock()
-        mock_response.ok = False
-        mock_response.status_code = 401
+        self.provider.client.get.assert_called_once_with(
+            f"{self.provider.base_url}/products/",
+        )
 
-        mock_get.return_value = mock_response
+    def test_401_raises_authentication_error(self):
+        self.provider.client.get.return_value.ok = False
+        self.provider.client.get.return_value.status_code = 401
 
         with self.assertRaises(AuthenticationError):
             self.provider.get_products()
 
-    @patch("integrations.providers.mock.requests.get")
-    def test_500_raises_temporary_provider_error(self, mock_get):
-        mock_response = Mock()
-        mock_response.ok = False
-        mock_response.status_code = 500
+        self.provider.client.get.assert_called_once_with(
+            f"{self.provider.base_url}/products/",
+        )
 
-        mock_get.return_value = mock_response
+    def test_500_raises_temporary_provider_error(self):
+        self.provider.client.get.return_value.ok = False
+        self.provider.client.get.return_value.status_code = 500
 
         with self.assertRaises(TemporaryProviderError):
             self.provider.get_products()
+
+        self.provider.client.get.assert_called_once_with(
+            f"{self.provider.base_url}/products/",
+        )

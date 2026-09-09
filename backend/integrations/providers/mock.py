@@ -1,4 +1,4 @@
-import requests
+from integrations.http_client import HTTPClient
 from decimal import Decimal
 from .base import BaseProvider
 from .schemas import NormalizedProduct, NormalizedVariant, NormalizedInventory, NormalizedOrder
@@ -15,11 +15,11 @@ class MockProvider(BaseProvider):
     def __init__(self, store):
         self.store = store
         self.base_url = "http://127.0.0.1:8000/api/mock-store"
+        self.client = HTTPClient()
 
     def get_products(self):
-        response = requests.get(
+        response = self.client.get(
             f"{self.base_url}/products/",
-            timeout=10,
         )
         if not response.ok:
             self._handle_response_error(response)
@@ -44,9 +44,8 @@ class MockProvider(BaseProvider):
         ]
 
     def get_inventory(self):
-        response = requests.get(
+        response = self.client.get(
             f"{self.base_url}/inventory/",
-            timeout=10,
         )
         if not response.ok:
             self._handle_response_error(response)
@@ -64,9 +63,8 @@ class MockProvider(BaseProvider):
         ]
 
     def get_orders(self):
-        response = requests.get(
+        response = self.client.get(
             f"{self.base_url}/orders/",
-            timeout=10,
         )
         if not response.ok:
             self._handle_response_error(response)
@@ -85,7 +83,7 @@ class MockProvider(BaseProvider):
         ]
 
     def update_inventory(self, external_variant_id, quantity):
-        response = requests.patch(
+        response = self.client.patch(
             f"{self.base_url}/inventory/{external_variant_id}/",
             json={"quantity": quantity},
             timeout=10,
