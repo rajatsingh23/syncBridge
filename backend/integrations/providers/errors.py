@@ -17,6 +17,10 @@ class RateLimitError(ProviderError):
 
     retryable = True
 
+    def __init__(self, message="Provider rate limit exceeded.", retry_after=None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
 
 class TemporaryProviderError(ProviderError):
     """Raised for temporary provider failures that may be retried."""

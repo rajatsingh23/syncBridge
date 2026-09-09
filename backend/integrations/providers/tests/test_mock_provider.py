@@ -149,3 +149,35 @@ class MockProviderTests(SimpleTestCase):
             self.provider.get_products()
 
         self.assertFalse(context.exception.retryable)
+
+    def test_429_stores_retry_after(self):
+        response = Mock()
+        response.status_code = 429
+        response.headers = {"Retry-After": "5"}
+
+        self.provider.client.get.return_value = response
+
+        with self.assertRaises(RateLimitError) as context:
+            self.provider._handle_response_error(response)
+
+        self.assertEqual(context.exception.retry_after, 5)
+
+    def test_429_without_retry_after(self):
+        response = Mock()
+        response.status_code = 429
+        response.header = {}
+
+        with self.assertRaises(RateLimitError) as context:
+            self.provider._handle_response_error(response)
+
+        self.assertIsNone(context.exception.retry_after)
+
+    def test_429_with_invalid_retry_after(self):
+        response = Mock()
+        response.status_code = 429
+        response.headers = {"Retry-After": "abc"}
+
+        with self.assertRaises(RateLimitError) as context:
+            self.provider._handle_response_error(response)
+
+        self.assertIsNone(context.exception.retry_after)

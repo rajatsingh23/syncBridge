@@ -29,3 +29,15 @@ class ProviderErrorTests(SimpleTestCase):
 
     def test_provider_request_error_is_not_retryable(self):
         self.assertFalse(ProviderRequestError.retryable)
+
+    def test_rate_limit_error_stores_retry_after(self):
+        error = RateLimitError(retry_after=5)
+
+        self.assertTrue(error.retryable)
+        self.assertEqual(error.retry_after, 5)
+
+    def test_rate_limit_error_without_retry_after(self):
+        error = RateLimitError()
+
+        self.assertTrue(error.retryable)
+        self.assertIsNone(error.retry_after)

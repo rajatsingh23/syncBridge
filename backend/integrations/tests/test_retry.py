@@ -7,6 +7,7 @@ from integrations.retry import calculate_backoff_delay, retry_call
 from integrations.providers.errors import (
     AuthenticationError,
     TemporaryProviderError,
+    RateLimitError,
 )
 
 
@@ -90,3 +91,25 @@ class RetryCallTests(SimpleTestCase):
                 call(4),
             ]
         )
+
+    def test_retry_uses_retry_after_when_provided(self):
+        error = RateLimitError(retry_after=5)
+
+        operation = Mock(side_effect=[error, "success"])
+
+        with patch("integrations.retry.time.sleep") as mock_sleep:
+            result = retry_call(operation)
+
+        self.assertEqual(result, "success")
+        mock_sleep.assert_called_once_with(5)
+
+    def test_rate_limit_without_retry_after_uses_exponential_backoff(self):
+        error = RateLimitError()
+
+        operation = Mock(side_effect=[error, "success"])
+
+        with patch("integrations.retry.time.sleep") as mock_sleep:
+            result = retry_call(operation)
+
+        self.assertEqual(result, "success")
+        mock_sleep.assert_called_once_with(1)

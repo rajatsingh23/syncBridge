@@ -15,5 +15,9 @@ def retry_call(operation, max_retries=3, base_delay=1):
             if retry_number == max_retries:
                 raise
 
-            delay = calculate_backoff_delay(retry_number, base_delay)
+            delay = (
+                error.retry_after
+                if getattr(error, "retry_after", None) is not None
+                else calculate_backoff_delay(retry_number, base_delay=base_delay)
+            )
             time.sleep(delay)

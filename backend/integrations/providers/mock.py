@@ -100,7 +100,18 @@ class MockProvider(BaseProvider):
             raise NotFoundError("Provider resource was not found.")
 
         if response.status_code == 429:
-            raise RateLimitError("Provider rate limit exceeded")
+            retry_after = response.headers.get("Retry-After")
+
+            if retry_after is not None:
+                try:
+                    retry_after = int(retry_after)
+                except(TypeError, ValueError):
+                    retry_after = None
+                    
+            raise RateLimitError(
+                "Provider rate limit exceeded",
+                retry_after=retry_after,
+                )
 
         if response.status_code >= 500:
             raise TemporaryProviderError(
