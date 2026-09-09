@@ -135,3 +135,15 @@ class RetryCallTests(SimpleTestCase):
 
         self.assertEqual(operation.call_count, 1)
         mock_sleep.assert_not_called()
+
+    def test_rate_limit_error_is_retried(self):
+        error = RateLimitError(retry_after=5)
+
+        operation = Mock(side_effect=[error, "success"])
+
+        with patch("integrations.retry.time.sleep") as mock_sleep:
+            result = retry_call(operation)
+
+        self.assertEqual(result, "success")
+        self.assertEqual(operation.call_count, 2)
+        mock_sleep.assert_called_once_with(5)
