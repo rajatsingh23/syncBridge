@@ -162,3 +162,10 @@ MAILERS = {
 }
 
 REDIS_URL = "redis://localhost:6379/0"
+
+SHOPIFY_CLIENT_ID = "test-client-id"
+SHOPIFY_REDIRECT_URI = "http://localhost:8000/api/integrations/shopify/callback/"
+SHOPIFY_SCOPES = [
+    "read_products",
+    "read_inventory"
+]
