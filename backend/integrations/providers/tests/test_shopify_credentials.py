@@ -4,10 +4,14 @@ from django.test import TestCase
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
+from requests.exceptions import ConnectionError
 
 from integrations.providers.shopify_credentials import ShopifyCredentials
+from integrations.providers.errors import AuthenticationError, TemporaryProviderError, ProviderRequestError
 
 from stores.models import Integration, Store
+
+from unittest.mock import patch, Mock
 
 class ShopifyCredentialsTests(TestCase):
     def test_credentials_store_access_and_refresh_tokens(self):
@@ -117,3 +121,138 @@ class ShopifyCredentialsTests(TestCase):
         self.assertNotIn("credentials", response_data[0])
         self.assertNotIn("secret-access-token", response.content.decode())
         self.assertNotIn("secret-refresh-token", response.content.decode())
+
+    def test_access_token_is_expired(self):
+        credentials = ShopifyCredentials(
+            shop_domain="example.myshopify.com",
+            access_token="access-token",
+            refresh_token="refresh-token",
+            access_token_expires_at=timezone.now() - timedelta(minutes=1),
+        )
+
+        self.assertTrue(credentials.is_access_token_expired())
+
+    def test_access_token_is_not_expired(self):
+        credentials = ShopifyCredentials(
+            shop_domain="example.myshopify.com",
+            access_token="access-token",
+            refresh_token="refresh-token",
+            access_token_expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+        self.assertFalse(credentials.is_access_token_expired())
+
+    @patch("integrations.providers.shopify_credentials.requests.post")
+    def test_refresh_access_token(self, mock_post):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "access_token": "new-access-token",
+            "refresh_token": "new-refresh-token",
+            "expires_in": 3600,
+            "refresh_token_expires_in": 7776000,
+        }
+        mock_post.return_value = mock_response
+
+        credentials = ShopifyCredentials(
+            shop_domain="example.myshopify.com",
+            access_token="old-access-token",
+            refresh_token="old-refresh-token",
+        )
+
+        credentials.refresh_access_token(
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+        )
+
+        self.assertEqual(
+            credentials.access_token,
+            "new-access-token",
+        )
+        self.assertEqual(
+            credentials.refresh_token,
+            "new-refresh-token",
+        )
+        self.assertIsNotNone(credentials.access_token_expires_at)
+        self.assertIsNotNone(credentials.refresh_token_expires_at)
+
+        mock_post.assert_called_once()
+
+    @patch("integrations.providers.shopify_credentials.requests.post")
+    def test_refresh_access_token_raises_authentication_error(self, mock_post):
+        mock_response = Mock()
+        mock_response.status_code = 401
+        mock_post.return_value = mock_response
+
+        credentials = ShopifyCredentials(
+            shop_domain="example.myshopify.com",
+            access_token="old-access-token",
+            refresh_token="expired-refresh-token",
+        )
+
+        with self.assertRaises(AuthenticationError):
+            credentials.refresh_access_token(
+                client_id="test-client-id",
+                client_secret="test-client-secret",
+            )
+
+    @patch("integrations.providers.shopify_credentials.requests.post")
+    def test_refresh_access_token_raises_temporary_error_on_connection_error(
+        self,
+        mock_post,
+    ):
+        mock_post.side_effect = ConnectionError("Connection failed")
+
+        credentials = ShopifyCredentials(
+            shop_domain="example.myshopify.com",
+            access_token="old-access-token",
+            refresh_token="refresh-token",
+        )
+
+        with self.assertRaises(TemporaryProviderError):
+            credentials.refresh_access_token(
+                client_id="test-client-id",
+                client_secret="test-client-secret",
+            )
+
+    @patch("integrations.providers.shopify_credentials.requests.post")
+    def test_refresh_access_token_raises_provider_request_error_on_400(
+        self,
+        mock_post,
+    ):
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_post.return_value = mock_response
+
+        credentials = ShopifyCredentials(
+            shop_domain="example.myshopify.com",
+            access_token="old-access-token",
+            refresh_token="refresh-token",
+        )
+
+        with self.assertRaises(ProviderRequestError):
+            credentials.refresh_access_token(
+                client_id="test-client-id",
+                client_secret="test-client-secret",
+            )
+
+    @patch("integrations.providers.shopify_credentials.requests.post")
+    def test_refresh_access_token_raises_temporary_error_on_500(
+        self,
+        mock_post,
+    ):
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_post.return_value = mock_response
+
+        credentials = ShopifyCredentials(
+            shop_domain="example.myshopify.com",
+            access_token="old-access-token",
+            refresh_token="refresh-token",
+        )
+
+        with self.assertRaises(TemporaryProviderError):
+            credentials.refresh_access_token(
+                client_id="test-client-id",
+                client_secret="test-client-secret",
+            )
