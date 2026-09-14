@@ -5,7 +5,7 @@ from decimal import Decimal
 class NormalizedVariant:
     external_id: str
     sku: str
-    price: str
+    price: Decimal
     currency: str
 
 
