@@ -2,7 +2,7 @@ from integrations.providers.factory import get_provider
 from synchronization.models import SyncJob
 from synchronization.services.inventory_sync import sync_inventory
 from synchronization.services.product_sync import sync_product
-
+from synchronization.services.order_sync import sync_order
 
 def fetch_sync_items(store, sync_type):
     provider = get_provider(store)
@@ -12,6 +12,9 @@ def fetch_sync_items(store, sync_type):
 
     if sync_type == SyncJob.SyncType.INVENTORY:
         return provider.get_inventory()
+
+    if sync_type == SyncJob.SyncType.ORDERS:
+        return provider.get_orders()
 
     raise ValueError(f"Unsupported sync type: {sync_type}")
 
@@ -29,6 +32,11 @@ def sync_item(store, sync_type, item):
             normalized_inventory=item,
         )
 
+    if sync_type == SyncJob.SyncType.ORDERS:
+        return sync_order(
+            store=store,
+            normalized_order=item,
+        )
     raise ValueError(f"Unsupported sync type: {sync_type}")
 
 

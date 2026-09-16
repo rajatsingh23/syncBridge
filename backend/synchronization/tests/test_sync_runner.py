@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from django.test import TestCase
 
@@ -194,3 +194,46 @@ class SyncRunnerTests(TestCase):
         self.assertEqual(result.store, self.store)
         self.assertEqual(result.quantity, 100)
         self.assertEqual(result.reserved_quantity, 10)
+
+    @patch("synchronization.services.sync_runner.sync_order")
+    def test_sync_item_dispatches_orders(self, mock_sync_order):
+        item = Mock()
+
+        mock_sync_order.return_value = "synced-order"
+
+        result = sync_item(
+            store=self.store,
+            sync_type=SyncJob.SyncType.ORDERS,
+            item=item,
+        )
+
+        mock_sync_order.assert_called_once_with(
+            store=self.store,
+            normalized_order=item,
+        )
+
+        self.assertEqual(result, "synced-order")
+
+    @patch("synchronization.services.sync_runner.get_provider")
+    def test_fetch_sync_items_fetches_orders(
+        self,
+        mock_get_provider,
+    ):
+        provider = mock_get_provider.return_value
+
+        provider.get_orders.return_value = [
+            "order-1",
+            "order-2",
+        ]
+
+        result = fetch_sync_items(
+            store=self.store,
+            sync_type=SyncJob.SyncType.ORDERS,
+        )
+
+        provider.get_orders.assert_called_once_with()
+
+        self.assertEqual(
+            result,
+            ["order-1", "order-2"],
+        )
