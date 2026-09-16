@@ -8,4 +8,5 @@ urlpatterns = [
     path("api/", include("products.urls")),
     path("api/mock-store/", include("mock_store.urls")),
     path("api/integrations", include("integrations.urls")),
+    path("api/sync/", include("synchronization.urls")),
 ]
