@@ -17,7 +17,7 @@ from products.models import (
 )
 from stores.models import Integration, Store
 from synchronization.models import SyncJob
-from synchronization.services.sync_runner import run_sync
+from synchronization.services.sync_runner import run_sync, fetch_sync_items, sync_item
 
 
 class SyncRunnerTests(TestCase):
@@ -149,3 +149,48 @@ class SyncRunnerTests(TestCase):
             "Unsupported sync type",
             str(context.exception),
         )
+
+    def test_fetch_sync_items_inventory(self):
+        normalized_inventory = [
+            NormalizedInventory(
+                external_variant_id="runner-external-variant-001",
+                sku="RUNNER-INV-001",
+                quantity=100,
+                reserved_quantity=10,
+            )
+        ]
+
+        with patch(
+            "synchronization.services.sync_runner.get_provider"
+        ) as mock_get_provider:
+            mock_provider = mock_get_provider.return_value
+            mock_provider.get_inventory.return_value = normalized_inventory
+
+            result = fetch_sync_items(
+                store=self.store,
+                sync_type=SyncJob.SyncType.INVENTORY,
+            )
+
+        mock_get_provider.assert_called_once_with(self.store)
+        mock_provider.get_inventory.assert_called_once_with()
+
+        self.assertEqual(result, normalized_inventory)
+
+    def test_sync_item_inventory(self):
+        normalized_inventory = NormalizedInventory(
+            external_variant_id="runner-external-variant-001",
+            sku="RUNNER-INV-001",
+            quantity=100,
+            reserved_quantity=10,
+        )
+
+        result = sync_item(
+            store=self.store,
+            sync_type=SyncJob.SyncType.INVENTORY,
+            item=normalized_inventory,
+        )
+
+        self.assertEqual(result.variant, self.variant)
+        self.assertEqual(result.store, self.store)
+        self.assertEqual(result.quantity, 100)
+        self.assertEqual(result.reserved_quantity, 10)

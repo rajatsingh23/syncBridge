@@ -12,6 +12,8 @@ def sync_inventory(store, normalized_inventory):
         .first()
     )
 
+    
+
     if external_variant is None:
         raise ValueError(
             "External variant mapping not found: "
