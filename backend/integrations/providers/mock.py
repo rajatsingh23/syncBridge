@@ -1,7 +1,14 @@
 from integrations.http_client import HTTPClient
 from decimal import Decimal
+from datetime import datetime
 from .base import BaseProvider
-from .schemas import NormalizedProduct, NormalizedVariant, NormalizedInventory, NormalizedOrder
+from .schemas import ( 
+    NormalizedProduct, 
+    NormalizedVariant, 
+    NormalizedInventory, 
+    NormalizedOrder,
+    NormalizedOrderItem,
+    )
 from .errors import (
     AuthenticationError,
     NotFoundError,
@@ -45,7 +52,7 @@ class MockProvider(BaseProvider):
                             external_id=variant["external_id"],
                             sku=variant["sku"],
                             price=Decimal(str(variant["price"])),
-                            currency=variant.get("variants", [])
+                            currency=variant.get("currency", "INR")
                         )
                         for variant in product.get("variants", [])
                     ],
@@ -77,6 +84,7 @@ class MockProvider(BaseProvider):
         response = self.client.get(
             f"{self.base_url}/orders/",
         )
+
         if not response.ok:
             self._handle_response_error(response)
 
@@ -85,14 +93,33 @@ class MockProvider(BaseProvider):
         return [
             NormalizedOrder(
                 external_id=order["external_id"],
-                customer_name=order["customer_name"],
-                status=order["status"],
-                total_amount=Decimal(order["total_amount"]),
-                currency=order["currency"],
+                customer_name=order.get("customer_name", ""),
+                customer_email=order.get("customer_email", ""),
+                status=order.get("status", "pending"),
+                total_amount=Decimal(
+                    str(order.get("total_amount") or "0")
+                ),
+                currency=order.get("currency", "INR"),
+                ordered_at=datetime.fromisoformat(
+                    order["ordered_at"].replace("Z", "+00:00")
+                ),
+                items=[
+                    NormalizedOrderItem(
+                        external_variant_id=str(
+                            item["external_variant_id"]
+                        ),
+                        sku=item.get("sku", ""),
+                        quantity=item.get("quantity", 0),
+                        unit_price=Decimal(
+                            str(item.get("unit_price") or "0")
+                        ),
+                    )
+                    for item in order.get("items", [])
+                ],
             )
             for order in orders
         ]
-
+    
     def update_inventory(self, external_variant_id, quantity):
         response = self.client.patch(
             f"{self.base_url}/inventory/{external_variant_id}/",

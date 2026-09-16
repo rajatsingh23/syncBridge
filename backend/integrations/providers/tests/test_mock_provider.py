@@ -83,9 +83,19 @@ class MockProviderTests(SimpleTestCase):
             {
                 "external_id": "order-001",
                 "customer_name": "Test Customer",
+                "customer_email": "test@example.com",
                 "status": "paid",
                 "total_amount": "1998.00",
                 "currency": "INR",
+                "ordered_at": "2026-09-16T10:30:00Z",
+                "items": [
+                    {
+                        "external_variant_id": "variant-001",
+                        "sku": "SKU-001",
+                        "quantity": 2,
+                        "unit_price": "999.00",
+                    }
+                ],
             }
         ]
 
@@ -93,9 +103,29 @@ class MockProviderTests(SimpleTestCase):
 
         self.assertEqual(len(orders), 1)
         self.assertIsInstance(orders[0], NormalizedOrder)
-        self.assertEqual(orders[0].external_id, "order-001")
-        self.assertEqual(orders[0].customer_name, "Test Customer")
-        self.assertEqual(orders[0].total_amount, Decimal("1998.00"))
+
+        order = orders[0]
+
+        self.assertEqual(order.external_id, "order-001")
+        self.assertEqual(order.customer_name, "Test Customer")
+        self.assertEqual(order.customer_email, "test@example.com")
+        self.assertEqual(order.status, "paid")
+        self.assertEqual(order.total_amount, Decimal("1998.00"))
+        self.assertEqual(order.currency, "INR")
+
+        self.assertEqual(
+            order.ordered_at.isoformat(),
+            "2026-09-16T10:30:00+00:00",
+        )
+
+        self.assertEqual(len(order.items), 1)
+
+        item = order.items[0]
+
+        self.assertEqual(item.external_variant_id, "variant-001")
+        self.assertEqual(item.sku, "SKU-001")
+        self.assertEqual(item.quantity, 2)
+        self.assertEqual(item.unit_price, Decimal("999.00"))
 
         self.provider.client.get.assert_called_once_with(
             f"{self.provider.base_url}/orders/",
