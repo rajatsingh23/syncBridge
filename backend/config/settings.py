@@ -162,6 +162,8 @@ MAILERS = {
 }
 
 REDIS_URL = "redis://localhost:6379/0"
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 
 SHOPIFY_CLIENT_ID = "test-client-id"
 SHOPIFY_REDIRECT_URI = "http://localhost:8000/api/integrations/shopify/callback/"
