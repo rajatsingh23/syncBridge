@@ -349,3 +349,41 @@ class WebhookProcessingTaskTests(TestCase):
             result["message"],
             "Webhook event was already processed.",
         )
+
+    @patch("webhooks.tasks.WebhookEvent.objects.get")
+    def test_processing_failure_marks_event_as_failed(
+        self,
+        mock_get,
+    ):
+        webhook_event = self.create_webhook_event()
+
+        mock_get.return_value = webhook_event
+
+        original_save = webhook_event.save
+        save_call_count = 0
+
+        def save_with_failure(*args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+
+            if save_call_count == 2:
+                raise RuntimeError("Deliberate processing failure")
+
+            return original_save(*args, **kwargs)
+
+        with patch.object(
+            webhook_event,
+            "save",
+            side_effect=save_with_failure,
+        ):
+            with self.assertRaises(RuntimeError):
+                process_webhook_event.apply(
+                    args=[webhook_event.id],
+                ).get()
+
+        webhook_event.refresh_from_db()
+
+        self.assertEqual(
+            webhook_event.status,
+            WebhookEvent.Status.FAILED,
+        )
