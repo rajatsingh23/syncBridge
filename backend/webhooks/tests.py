@@ -4,12 +4,10 @@ from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from integrations.providers.schemas import NormalizedProduct
-from integrations.providers.schemas import NormalizedVariant
 from stores.models import Integration, Store
 from webhooks.models import WebhookEvent
 from webhooks.services.signature import generate_signature
-
+from webhooks.tasks import process_webhook_event
 
 class WebhookSignatureTests(SimpleTestCase):
 
@@ -237,4 +235,85 @@ class WebhookEndpointTests(TestCase):
         self.assertIn(
             "already received",
             second_response.json()["detail"],
+        )
+
+class WebhookProcessingTaskTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            email="webhook-task@example.com",
+            password="test-password",
+        )
+
+        cls.integration = Integration.objects.get(
+            provider=Integration.Provider.MOCK,
+        )
+
+        cls.store = Store.objects.create(
+            user=cls.user,
+            integration=cls.integration,
+            name="Task Test Store",
+            external_store_id="task-store-001",
+            credentials={
+                "webhook_secret": "webhook-test-secret",
+            },
+        )
+
+    def create_webhook_event(self, status=WebhookEvent.Status.RECEIVED):
+        return WebhookEvent.objects.create(
+            store=self.store,
+            event_id="task-event-001",
+            event_type="product.updated",
+            payload={
+                "event_id": "task-event-001",
+                "event_type": "product.updated",
+                "data": {
+                    "product_id": "product-001",
+                },
+            },
+            status=status,
+        )
+
+    def test_received_event_is_processed(self):
+        webhook_event = self.create_webhook_event()
+
+        result = process_webhook_event.apply(
+            args=[webhook_event.id],
+        ).get()
+
+        webhook_event.refresh_from_db()
+
+        self.assertEqual(
+            webhook_event.status,
+            WebhookEvent.Status.PROCESSED,
+        )
+        self.assertIsNotNone(webhook_event.processed_at)
+
+        self.assertEqual(
+            result["webhook_event_id"],
+            webhook_event.id,
+        )
+        self.assertEqual(
+            result["status"],
+            WebhookEvent.Status.PROCESSED,
+        )
+
+    def test_already_processed_event_is_not_processed_again(self):
+        webhook_event = self.create_webhook_event(
+            status=WebhookEvent.Status.PROCESSED,
+        )
+
+        result = process_webhook_event.apply(
+            args=[webhook_event.id],
+        ).get()
+
+        webhook_event.refresh_from_db()
+
+        self.assertEqual(
+            webhook_event.status,
+            WebhookEvent.Status.PROCESSED,
+        )
+        self.assertEqual(
+            result["message"],
+            "Webhook event was already processed.",
         )
