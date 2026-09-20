@@ -376,10 +376,103 @@ class WebhookProcessingTaskTests(TestCase):
             "save",
             side_effect=save_with_failure,
         ):
-            with self.assertRaises(RuntimeError):
-                process_webhook_event.apply(
-                    args=[webhook_event.id],
-                ).get()
+            process_webhook_event.push_request(retries=3)
+
+            try:
+                with self.assertRaises(RuntimeError):
+                    process_webhook_event.run(webhook_event.id)
+            finally:
+                process_webhook_event.pop_request()
+
+        webhook_event.refresh_from_db()
+
+        self.assertEqual(
+            webhook_event.status,
+            WebhookEvent.Status.FAILED,
+        )
+
+    def test_processing_error_triggers_retry(self):
+        webhook_event = WebhookEvent.objects.create(
+            store=self.store,
+            event_id="retry-event-1",
+            event_type="product.created",
+            payload={"product_id": 123},
+        )
+
+        original_save = webhook_event.save
+        save_call_count = 0
+
+        def failing_save(*args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+
+            if save_call_count == 2:
+                raise RuntimeError("Temporary processing failure")
+
+            return original_save(*args, **kwargs)
+
+        with patch(
+            "webhooks.tasks.WebhookEvent.objects.get",
+            return_value=webhook_event,
+        ), patch.object(
+            webhook_event,
+            "save",
+            side_effect=failing_save,
+        ), patch.object(
+            process_webhook_event,
+            "retry",
+            side_effect=RuntimeError("Retry requested"),
+        ) as mock_retry:
+
+            with self.assertRaises(RuntimeError) as context:
+                process_webhook_event.run(webhook_event.id)
+
+        self.assertEqual(
+            str(context.exception),
+            "Retry requested",
+        )
+
+        mock_retry.assert_called_once()
+
+    def test_webhook_fails_after_maximum_retries(self):
+        webhook_event = WebhookEvent.objects.create(
+            store=self.store,
+            event_id="retry-limit-event",
+            event_type="product.created",
+            payload={"product_id": 456},
+        )
+
+        original_save = webhook_event.save
+        save_call_count = 0
+
+        def failing_save(*args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+
+            # First save: PROCESSING — succeeds.
+            # Every subsequent processing save fails.
+            if save_call_count == 2:
+                raise RuntimeError("Permanent processing failure")
+
+            return original_save(*args, **kwargs)
+
+        with patch(
+            "webhooks.tasks.WebhookEvent.objects.get",
+            return_value=webhook_event,
+        ), patch.object(
+            webhook_event,
+            "save",
+            side_effect=failing_save,
+        ):
+            process_webhook_event.push_request(retries=3)
+
+            try:
+                with self.assertRaises(RuntimeError):
+                    process_webhook_event.run(
+                        webhook_event.id,
+                    )
+            finally:
+                process_webhook_event.pop_request()
 
         webhook_event.refresh_from_db()
 

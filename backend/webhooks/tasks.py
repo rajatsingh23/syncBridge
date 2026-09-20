@@ -3,8 +3,9 @@ from django.utils import timezone
 
 from webhooks.models import WebhookEvent
 
-@shared_task
-def process_webhook_event(webhook_event_id):
+
+@shared_task(bind=True, max_retries=3)
+def process_webhook_event(self, webhook_event_id):
     webhook_event = WebhookEvent.objects.get(
         id=webhook_event_id,
     )
@@ -29,11 +30,19 @@ def process_webhook_event(webhook_event_id):
         webhook_event.save(
             update_fields=["status", "processed_at"],
         )
-    except Exception:
+
+    except Exception as error:
+        if self.request.retries < self.max_retries:
+            raise self.retry(
+                exc=error,
+                countdown=2,
+            )
+
         webhook_event.status = WebhookEvent.Status.FAILED
         webhook_event.save(
             update_fields=["status"],
         )
+
         raise
 
     return {
