@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
@@ -237,6 +238,37 @@ class WebhookEndpointTests(TestCase):
             second_response.json()["detail"],
         )
 
+    @patch("webhooks.views.process_webhook_event.delay")
+    def test_valid_webhook_queues_processing_task(
+        self,
+        mock_delay,
+    ):
+        payload = self.make_payload()
+        raw_payload = json.dumps(payload).encode("utf-8")
+
+        signature = generate_signature(
+            payload=raw_payload,
+            secret="webhook-test-secret",
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                "/api/webhooks/mock/",
+                data=raw_payload,
+                content_type="application/json",
+                HTTP_X_STORE_ID=str(self.store.id),
+                HTTP_X_WEBHOOK_SIGNATURE=signature,
+            )
+
+        self.assertEqual(response.status_code, 200)
+
+        webhook_event = WebhookEvent.objects.get(
+            store=self.store,
+            event_id=payload["event_id"],
+        )
+
+        mock_delay.assert_called_once_with(webhook_event.id)
+        
 class WebhookProcessingTaskTests(TestCase):
     @classmethod
     def setUpTestData(cls):

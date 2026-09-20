@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from stores.models import Store, Integration
 from webhooks.models import WebhookEvent
 from webhooks.services.signature import verify_signature
-
+from webhooks.tasks import process_webhook_event
 
 class MockWebhookView(APIView):
     authentication_classes = []
@@ -96,17 +96,9 @@ class MockWebhookView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        WebhookEvent.objects.create(
-            store=store,
-            event_id=event_id,
-            event_type=event_type,
-            payload=payload,
-            status=WebhookEvent.Status.RECEIVED,
-        )
-
         try:
             with transaction.atomic():
-                WebhookEvent.objects.create(
+                webhook_event = WebhookEvent.objects.create(
                     store=store,
                     event_id=event_id,
                     event_type=event_type,
@@ -116,8 +108,20 @@ class MockWebhookView(APIView):
         except IntegrityError:
             return Response(
                 {
-                    "detail": "Webhook received.",
+                    "detail": "Webhook event already received.",
                     "event_id": event_id,
                 },
                 status=status.HTTP_200_OK,
             )
+
+        transaction.on_commit(
+            lambda: process_webhook_event.delay(webhook_event.id)
+        )
+
+        return Response(
+            {
+                "detail": "Webhook received.",
+                "event_id": event_id,
+            },
+            status=status.HTTP_200_OK,
+        )
