@@ -480,3 +480,89 @@ class WebhookProcessingTaskTests(TestCase):
             webhook_event.status,
             WebhookEvent.Status.FAILED,
         )
+
+    @patch("webhooks.tasks.WebhookEvent.objects.get")
+    def test_retry_failure_is_logged(self, mock_get):
+        webhook_event = self.create_webhook_event()
+
+        mock_get.return_value = webhook_event
+
+        original_save = webhook_event.save
+        save_call_count = 0
+
+        def failing_save(*args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+
+            if save_call_count == 2:
+                raise RuntimeError("Temporary failure")
+
+            return original_save(*args, **kwargs)
+
+        with self.assertLogs(
+            "webhooks.tasks",
+            level="WARNING",
+        ) as logs:
+            with patch.object(
+                process_webhook_event,
+                "retry",
+                side_effect=RuntimeError("Retry requested"),
+            ):
+                with patch.object(
+                    webhook_event,
+                    "save",
+                    side_effect=failing_save,
+                ):
+                    with self.assertRaises(RuntimeError):
+                        process_webhook_event.run(webhook_event.id)
+
+        self.assertTrue(
+            any(
+                "Webhook processing failed; retrying."
+                in message
+                for message in logs.output
+            )
+        )
+
+    @patch("webhooks.tasks.WebhookEvent.objects.get")
+    def test_permanent_failure_is_logged(self, mock_get):
+        webhook_event = self.create_webhook_event()
+
+        mock_get.return_value = webhook_event
+
+        original_save = webhook_event.save
+        save_call_count = 0
+
+        def failing_save(*args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+
+            if save_call_count == 2:
+                raise RuntimeError("Permanent failure")
+
+            return original_save(*args, **kwargs)
+
+        with self.assertLogs(
+            "webhooks.tasks",
+            level="ERROR",
+        ) as logs:
+            with patch.object(
+                webhook_event,
+                "save",
+                side_effect=failing_save,
+            ):
+                process_webhook_event.push_request(retries=3)
+
+                try:
+                    with self.assertRaises(RuntimeError):
+                        process_webhook_event.run(webhook_event.id)
+                finally:
+                    process_webhook_event.pop_request()
+
+        self.assertTrue(
+            any(
+                "Webhook processing failed permanently."
+                in message
+                for message in logs.output
+            )
+        )
