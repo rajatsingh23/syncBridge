@@ -1,5 +1,5 @@
 import json
-
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
@@ -104,10 +104,20 @@ class MockWebhookView(APIView):
             status=WebhookEvent.Status.RECEIVED,
         )
 
-        return Response(
-            {
-                "detail": "Webhook received.",
-                "event_id": event_id,
-            },
-            status=status.HTTP_200_OK,
-        )
+        try:
+            with transaction.atomic():
+                WebhookEvent.objects.create(
+                    store=store,
+                    event_id=event_id,
+                    event_type=event_type,
+                    payload=payload,
+                    status=WebhookEvent.Status.RECEIVED,
+                )
+        except IntegrityError:
+            return Response(
+                {
+                    "detail": "Webhook received.",
+                    "event_id": event_id,
+                },
+                status=status.HTTP_200_OK,
+            )
