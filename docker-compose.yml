@@ -21,6 +21,24 @@ services:
     volumes:
       - redis_data:/data
 
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: syncbridge-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    command: python manage.py runserver 0.0.0.0:8000
+
 volumes:
   postgres_data:
   redis_data:
