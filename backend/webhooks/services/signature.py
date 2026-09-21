@@ -54,3 +54,31 @@ def verify_shopify_signature(
         expected_signature,
         signature,
     )
+
+def generate_woocommerce_signature(
+    payload: bytes,
+    secret: str,
+) -> str:
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        payload,
+        hashlib.sha256,
+    ).digest()
+
+    return base64.b64encode(digest).decode("utf-8")
+
+
+def verify_woocommerce_signature(
+    payload: bytes,
+    signature: str,
+    secret: str,
+) -> bool:
+    expected_signature = generate_woocommerce_signature(
+        payload=payload,
+        secret=secret,
+    )
+
+    return hmac.compare_digest(
+        expected_signature,
+        signature,
+    )

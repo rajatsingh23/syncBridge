@@ -8,8 +8,7 @@ from django.urls import reverse
 from accounts.models import User
 from stores.models import Integration, Store
 from webhooks.models import WebhookEvent
-from webhooks.services.signature import generate_signature, generate_shopify_signature
-from webhooks.views import ShopifyWebhookView
+from webhooks.services.signature import generate_signature, generate_shopify_signature, generate_woocommerce_signature
 from webhooks.tasks import process_webhook_event
 
 class WebhookSignatureTests(SimpleTestCase):
@@ -850,6 +849,317 @@ class ShopifyWebhookEndpointTests(TestCase):
         headers = {
             **self.headers,
             "HTTP_X_STORE_ID": str(mock_store.id),
+        }
+
+        response = self.client.post(
+            self.url,
+            data=self.raw_payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        self.assertEqual(
+            response.json()["detail"],
+            "Invalid provider for this webhook endpoint.",
+        )
+
+    def test_missing_webhook_secret(self):
+        self.store.credentials = {}
+        self.store.save(update_fields=["credentials"])
+
+        response = self.client.post(
+            self.url,
+            data=self.raw_payload,
+            content_type="application/json",
+            **self.headers,
+        )
+
+        self.assertEqual(response.status_code, 500)
+
+class WooCommerceWebhookEndpointTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="woocommerce-test@example.com",
+            password="test-password",
+        )
+
+        self.integration, _ = Integration.objects.get_or_create(
+            provider=Integration.Provider.WOOCOMMERCE,
+            defaults={
+                "name": "WooCommerce",
+            },
+        )
+
+        self.store = Store.objects.create(
+            user=self.user,
+            integration=self.integration,
+            name="WooCommerce Test Store",
+            external_store_id="woocommerce-test-store",
+            credentials={
+                "webhook_secret": "woocommerce-test-secret",
+            },
+        )
+
+        self.url = reverse("woocommerce-webhook")
+
+        self.payload = {
+            "id": 12345,
+            "status": "processing",
+            "total": "149.99",
+            "currency": "INR",
+        }
+
+        self.raw_payload = json.dumps(
+            self.payload,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        self.webhook_id = "woocommerce-webhook-001"
+        self.topic = "order.created"
+
+        self.signature = generate_woocommerce_signature(
+            payload=self.raw_payload,
+            secret="woocommerce-test-secret",
+        )
+
+        self.headers = {
+            "HTTP_X_STORE_ID": str(self.store.id),
+            "HTTP_X_WC_WEBHOOK_SIGNATURE": self.signature,
+            "HTTP_X_WC_WEBHOOK_ID": self.webhook_id,
+            "HTTP_X_WC_WEBHOOK_TOPIC": self.topic,
+        }
+
+    @patch("webhooks.views.process_webhook_event.delay")
+    def test_valid_woocommerce_webhook(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                self.url,
+                data=self.raw_payload,
+                content_type="application/json",
+                **self.headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            response.json()["event_id"],
+            self.webhook_id,
+        )
+
+        webhook_event = WebhookEvent.objects.get(
+            store=self.store,
+            event_id=self.webhook_id,
+        )
+
+        self.assertEqual(
+            webhook_event.event_type,
+            self.topic,
+        )
+
+        self.assertEqual(
+            webhook_event.payload,
+            self.payload,
+        )
+
+        self.assertEqual(
+            webhook_event.status,
+            WebhookEvent.Status.RECEIVED,
+        )
+
+        mock_delay.assert_called_once_with(webhook_event.id)
+
+    def test_invalid_woocommerce_signature(self):
+        headers = {
+            **self.headers,
+            "HTTP_X_WC_WEBHOOK_SIGNATURE": "invalid-signature",
+        }
+
+        response = self.client.post(
+            self.url,
+            data=self.raw_payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+        self.assertFalse(
+            WebhookEvent.objects.filter(
+                store=self.store,
+                event_id=self.webhook_id,
+            ).exists()
+        )
+
+    def test_missing_woocommerce_signature(self):
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key != "HTTP_X_WC_WEBHOOK_SIGNATURE"
+        }
+
+        response = self.client.post(
+            self.url,
+            data=self.raw_payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_missing_webhook_id(self):
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key != "HTTP_X_WC_WEBHOOK_ID"
+        }
+
+        response = self.client.post(
+            self.url,
+            data=self.raw_payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_topic(self):
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key != "HTTP_X_WC_WEBHOOK_TOPIC"
+        }
+
+        response = self.client.post(
+            self.url,
+            data=self.raw_payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    @patch("webhooks.views.process_webhook_event.delay")
+    def test_duplicate_woocommerce_webhook(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            first_response = self.client.post(
+                self.url,
+                data=self.raw_payload,
+                content_type="application/json",
+                **self.headers,
+            )
+
+            second_response = self.client.post(
+                self.url,
+                data=self.raw_payload,
+                content_type="application/json",
+                **self.headers,
+            )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+
+        self.assertEqual(
+            WebhookEvent.objects.filter(
+                store=self.store,
+                event_id=self.webhook_id,
+            ).count(),
+            1,
+        )
+
+        mock_delay.assert_called_once()
+
+    def test_invalid_json_payload(self):
+        invalid_payload = b'{"invalid_json": '
+
+        signature = generate_woocommerce_signature(
+            payload=invalid_payload,
+            secret="woocommerce-test-secret",
+        )
+
+        headers = {
+            **self.headers,
+            "HTTP_X_WC_WEBHOOK_SIGNATURE": signature,
+        }
+
+        response = self.client.post(
+            self.url,
+            data=invalid_payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        self.assertEqual(
+            response.json()["detail"],
+            "Invalid JSON payload.",
+        )
+
+    def test_json_array_payload_rejected(self):
+        payload = b"[1, 2, 3]"
+
+        signature = generate_woocommerce_signature(
+            payload=payload,
+            secret="woocommerce-test-secret",
+        )
+
+        headers = {
+            **self.headers,
+            "HTTP_X_WC_WEBHOOK_SIGNATURE": signature,
+        }
+
+        response = self.client.post(
+            self.url,
+            data=payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        self.assertEqual(
+            response.json()["detail"],
+            "Webhook payload must be a JSON object.",
+        )
+
+    def test_unknown_store(self):
+        headers = {
+            **self.headers,
+            "HTTP_X_STORE_ID": "999999",
+        }
+
+        response = self.client.post(
+            self.url,
+            data=self.raw_payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_shopify_store_rejected(self):
+        shopify_integration, _ = Integration.objects.get_or_create(
+            provider=Integration.Provider.SHOPIFY,
+            defaults={
+                "name": "Shopify",
+            },
+        )
+
+        shopify_store = Store.objects.create(
+            user=self.user,
+            integration=shopify_integration,
+            name="Shopify Test Store",
+            external_store_id="shopify-test-store",
+            credentials={
+                "webhook_secret": "shopify-secret",
+            },
+        )
+
+        headers = {
+            **self.headers,
+            "HTTP_X_STORE_ID": str(shopify_store.id),
         }
 
         response = self.client.post(
