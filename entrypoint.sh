@@ -2,6 +2,10 @@
 
 set -e
 
+echo "Checking database connection..."
+
+python manage.py check --database default
+
 echo "Running database migrations..."
 
 python manage.py migrate --noinput
