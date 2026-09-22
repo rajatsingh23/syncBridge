@@ -38,5 +38,3 @@ celerybeat-schedule
 build/
 dist/
 *.egg-info/
-
-/docs/
